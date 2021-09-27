@@ -2,6 +2,15 @@
 
 Prometheus [exporters](https://prometheus.io/docs/instrumenting/writing_exporters) are used to export metrics from third-party systems as Prometheus metrics - this is an exporter to scrape for AWS spot price termination notice on the instance for [Hollowtrees](https://github.com/banzaicloud/hollowtrees).
 
+### Status Of This Repository
+
+This repository is a maintained fork of [banzaicloud/spot-termination-exporter](https://github.com/banzaicloud/spot-termination-exporter) with a small number of changes due to the lack of activity in the upstream:
+
+1. The addition of `instance_type` labels to metrics relating to instance termination and rebalance recommendations to allow for analysis of metrics by instance type
+1. The addition of a metric for [rebalance recommendation events](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/rebalance-recommendations.html) from the metadata service
+
+Images for this fork are published to Github's container registry, and are available under [ghcr.io/gjtempleton/spot-termination-exporter](https://github.com/gjtempleton/spot-termination-exporter/pkgs/container/spot-termination-exporter).
+
 ### Spot instance lifecycle
 
 * User submits a bid to run a desired number of EC2 instances of a particular type. The bid includes the price that the user is willing to pay to use the instance for an hour.
