@@ -1,6 +1,6 @@
 ## Spot instance termination exporter
 
-Prometheus [exporters](https://prometheus.io/docs/instrumenting/writing_exporters) are used to export metrics from third-party systems as Prometheus metrics - this is an exporter to scrape for AWS spot price termination notice on the instance for [Hollowtrees](https://github.com/banzaicloud/hollowtrees).
+Prometheus [exporters](https://prometheus.io/docs/instrumenting/writing_exporters) are used to export metrics from third-party systems as Prometheus metrics - this is an exporter to scrape for AWS spot price termination notice and rebalance recommendations.
 
 ### Status Of This Repository
 
@@ -8,6 +8,7 @@ This repository is a maintained fork of [banzaicloud/spot-termination-exporter](
 
 1. The addition of `instance_type` labels to metrics relating to instance termination and rebalance recommendations to allow for analysis of metrics by instance type
 1. The addition of a metric for [rebalance recommendation events](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/rebalance-recommendations.html) from the metadata service
+1. Moved from dep to go modules and updated the version of go and base docker images
 
 Images for this fork are published to Github's container registry, and are available under [ghcr.io/gjtempleton/spot-termination-exporter](https://github.com/gjtempleton/spot-termination-exporter/pkgs/container/spot-termination-exporter).
 
@@ -74,15 +75,16 @@ The exporter can be started with this configuration to query this endpoint local
 # HELP aws_instance_metadata_service_available Metadata service available
 # TYPE aws_instance_metadata_service_available gauge
 aws_instance_metadata_service_available{instance_id="i-0d2aab13057917887"} 1
+# HELP aws_instance_metadata_service_events_available Metadata service events endpoint available
+# TYPE aws_instance_metadata_service_events_available gauge
+aws_instance_metadata_service_events_available{instance_id="i-0d2aab13057917887"} 1
+# HELP aws_instance_rebalance_recommended Instance rebalance is recommended
+# TYPE aws_instance_rebalance_recommended gauge
+aws_instance_rebalance_recommended{instance_id="i-0d2aab13057917887",instance_type="c5.9xlarge"} 1
 # HELP aws_instance_termination_imminent Instance is about to be terminated
 # TYPE aws_instance_termination_imminent gauge
-aws_instance_termination_imminent{instance_action="stop",instance_id="i-0d2aab13057917887"} 1
+aws_instance_termination_imminent{instance_action="stop",instance_id="i-0d2aab13057917887",instance_type="c5.9xlarge"} 1
 # HELP aws_instance_termination_in Instance will be terminated in
 # TYPE aws_instance_termination_in gauge
-aws_instance_termination_in{instance_id="i-0d2aab13057917887"} 119.888545
+aws_instance_termination_in{instance_id="i-0d2aab13057917887",instance_type="c5.9xlarge"} 119.714615
 ```
-
-### Default Hollowtrees node exporters associated to alerts:
-
-* AWS spot instance termination [collector](https://github.com/banzaicloud/spot-termination-collector)
-* AWS autoscaling group [exporter](https://github.com/banzaicloud/aws-autoscaling-exporter)
