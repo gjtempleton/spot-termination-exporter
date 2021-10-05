@@ -18,12 +18,12 @@ type terminationCollector struct {
 	terminationTime           *prometheus.Desc
 }
 
-type InstanceAction struct {
+type instanceAction struct {
 	Action string    `json:"action"`
 	Time   time.Time `json:"time"`
 }
 
-type InstanceEvent struct {
+type instanceEvent struct {
 	NoticeTime time.Time `json:"noticeTime"`
 }
 
@@ -54,7 +54,7 @@ func (c *terminationCollector) Collect(ch chan<- prometheus.Metric) {
 		Timeout: timeout,
 	}
 	idResp, err := client.Get(c.metadataEndpoint + "instance-id")
-	var instanceId string
+	var instanceID string
 	if err != nil {
 		log.Errorf("couldn't parse instance-id from metadata: %s", err.Error())
 		return
@@ -65,7 +65,7 @@ func (c *terminationCollector) Collect(ch chan<- prometheus.Metric) {
 	}
 	defer idResp.Body.Close()
 	body, _ := ioutil.ReadAll(idResp.Body)
-	instanceId = string(body)
+	instanceID = string(body)
 
 	typeResp, err := client.Get(c.metadataEndpoint + "instance-type")
 	var instanceType string
@@ -84,31 +84,31 @@ func (c *terminationCollector) Collect(ch chan<- prometheus.Metric) {
 	resp, err := client.Get(c.metadataEndpoint + "spot/instance-action")
 	if err != nil {
 		log.Errorf("Failed to fetch data from metadata service: %s", err)
-		ch <- prometheus.MustNewConstMetric(c.scrapeSuccessful, prometheus.GaugeValue, 0, instanceId)
+		ch <- prometheus.MustNewConstMetric(c.scrapeSuccessful, prometheus.GaugeValue, 0, instanceID)
 	} else {
-		ch <- prometheus.MustNewConstMetric(c.scrapeSuccessful, prometheus.GaugeValue, 1, instanceId)
+		ch <- prometheus.MustNewConstMetric(c.scrapeSuccessful, prometheus.GaugeValue, 1, instanceID)
 
 		if resp.StatusCode == 404 {
 			log.Debug("instance-action endpoint not found")
-			ch <- prometheus.MustNewConstMetric(c.terminationIndicator, prometheus.GaugeValue, 0, "", instanceId, instanceType)
+			ch <- prometheus.MustNewConstMetric(c.terminationIndicator, prometheus.GaugeValue, 0, "", instanceID, instanceType)
 		} else {
 			defer resp.Body.Close()
 			body, _ := ioutil.ReadAll(resp.Body)
 
-			var ia = InstanceAction{}
+			var ia = instanceAction{}
 			err := json.Unmarshal(body, &ia)
 
 			// value may be present but not be a time according to AWS docs,
 			// so parse error is not fatal
 			if err != nil {
 				log.Errorf("Couldn't parse instance-action metadata: %s", err)
-				ch <- prometheus.MustNewConstMetric(c.terminationIndicator, prometheus.GaugeValue, 0, instanceId, instanceType)
+				ch <- prometheus.MustNewConstMetric(c.terminationIndicator, prometheus.GaugeValue, 0, instanceID, instanceType)
 			} else {
 				log.Infof("instance-action endpoint available, termination time: %v", ia.Time)
-				ch <- prometheus.MustNewConstMetric(c.terminationIndicator, prometheus.GaugeValue, 1, ia.Action, instanceId, instanceType)
+				ch <- prometheus.MustNewConstMetric(c.terminationIndicator, prometheus.GaugeValue, 1, ia.Action, instanceID, instanceType)
 				delta := ia.Time.Sub(time.Now())
 				if delta.Seconds() > 0 {
-					ch <- prometheus.MustNewConstMetric(c.terminationTime, prometheus.GaugeValue, delta.Seconds(), instanceId, instanceType)
+					ch <- prometheus.MustNewConstMetric(c.terminationTime, prometheus.GaugeValue, delta.Seconds(), instanceID, instanceType)
 				}
 			}
 		}
@@ -117,30 +117,30 @@ func (c *terminationCollector) Collect(ch chan<- prometheus.Metric) {
 	eventResp, err := client.Get(c.metadataEndpoint + "events/recommendations/rebalance")
 	if err != nil {
 		log.Errorf("Failed to fetch events data from metadata service: %s", err)
-		ch <- prometheus.MustNewConstMetric(c.rebalanceScrapeSuccessful, prometheus.GaugeValue, 0, instanceId)
+		ch <- prometheus.MustNewConstMetric(c.rebalanceScrapeSuccessful, prometheus.GaugeValue, 0, instanceID)
 		// Return early as this is the last metric/metadata scrape attempt
 		return
 	} else {
-		ch <- prometheus.MustNewConstMetric(c.rebalanceScrapeSuccessful, prometheus.GaugeValue, 1, instanceId)
+		ch <- prometheus.MustNewConstMetric(c.rebalanceScrapeSuccessful, prometheus.GaugeValue, 1, instanceID)
 
 		if eventResp.StatusCode == 404 {
 			log.Debug("rebalance endpoint not found")
-			ch <- prometheus.MustNewConstMetric(c.rebalanceIndicator, prometheus.GaugeValue, 0, instanceId, instanceType)
+			ch <- prometheus.MustNewConstMetric(c.rebalanceIndicator, prometheus.GaugeValue, 0, instanceID, instanceType)
 			// Return early as this is the last metric/metadata scrape attempt
 			return
 		} else {
 			defer eventResp.Body.Close()
 			body, _ := ioutil.ReadAll(eventResp.Body)
 
-			var ie = InstanceEvent{}
+			var ie = instanceEvent{}
 			err := json.Unmarshal(body, &ie)
 
 			if err != nil {
 				log.Errorf("Couldn't parse rebalance recommendation event metadata: %s", err)
-				ch <- prometheus.MustNewConstMetric(c.rebalanceIndicator, prometheus.GaugeValue, 0, instanceId, instanceType)
+				ch <- prometheus.MustNewConstMetric(c.rebalanceIndicator, prometheus.GaugeValue, 0, instanceID, instanceType)
 			} else {
 				log.Infof("rebalance recommendation event endpoint available, recommendation time: %v", ie.NoticeTime)
-				ch <- prometheus.MustNewConstMetric(c.rebalanceIndicator, prometheus.GaugeValue, 1, instanceId, instanceType)
+				ch <- prometheus.MustNewConstMetric(c.rebalanceIndicator, prometheus.GaugeValue, 1, instanceID, instanceType)
 			}
 		}
 	}
