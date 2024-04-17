@@ -27,13 +27,15 @@ var bindAddr = flag.String("bind-addr", ":9189", "bind address for the metrics s
 var metricsPath = flag.String("metrics-path", "/metrics", "path to metrics endpoint")
 var rawLevel = flag.String("log-level", "info", "log level")
 var metadataEndpoint = flag.String("metadata-endpoint", "http://169.254.169.254/latest/meta-data/", "metadata endpoint to query")
+var tokenEndpoint = flag.String("token-endpoint", "http://169.254.169.254/latest/api/token", "token endpoint to query")
+var useIMDSv2 = flag.Bool("use-imdsv2", false, "token endpoint to query")
 
 func main() {
 	log.SetLevel(logLevel)
 	log.Info("Starting spot-termination-exporter")
 
 	log.Debug("registering term exporter")
-	prometheus.MustRegister(NewTerminationCollector(*metadataEndpoint))
+	prometheus.MustRegister(NewTerminationCollector(*metadataEndpoint, *tokenEndpoint, *useIMDSv2))
 
 	go serveMetrics()
 
