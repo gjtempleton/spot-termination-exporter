@@ -11,6 +11,8 @@ import (
 
 type terminationCollector struct {
 	metadataEndpoint          string
+	tokenEndpoint             string
+	useIMDSv2                 bool
 	rebalanceIndicator        *prometheus.Desc
 	rebalanceScrapeSuccessful *prometheus.Desc
 	scrapeSuccessful          *prometheus.Desc
@@ -27,9 +29,11 @@ type instanceEvent struct {
 	NoticeTime time.Time `json:"noticeTime"`
 }
 
-func NewTerminationCollector(me string) *terminationCollector {
+func NewTerminationCollector(metadataEndpoint, tokenEndpoint string, useIMDSv2 bool) *terminationCollector {
 	return &terminationCollector{
-		metadataEndpoint:          me,
+		metadataEndpoint:          metadataEndpoint,
+		tokenEndpoint:             tokenEndpoint,
+		useIMDSv2:                 useIMDSv2,
 		rebalanceIndicator:        prometheus.NewDesc("aws_instance_rebalance_recommended", "Instance rebalance is recommended", []string{"instance_id", "instance_type"}, nil),
 		rebalanceScrapeSuccessful: prometheus.NewDesc("aws_instance_metadata_service_events_available", "Metadata service events endpoint available", []string{"instance_id"}, nil),
 		scrapeSuccessful:          prometheus.NewDesc("aws_instance_metadata_service_available", "Metadata service available", []string{"instance_id"}, nil),
@@ -49,11 +53,23 @@ func (c *terminationCollector) Describe(ch chan<- *prometheus.Desc) {
 
 func (c *terminationCollector) Collect(ch chan<- prometheus.Metric) {
 	log.Info("Fetching termination data from metadata-service")
+
 	timeout := time.Duration(1 * time.Second)
 	client := http.Client{
 		Timeout: timeout,
 	}
-	idResp, err := client.Get(c.metadataEndpoint + "instance-id")
+
+	token := ""
+	if c.useIMDSv2 {
+		maybeToken, err := c.getIMDSv2Token(&client, c.tokenEndpoint)
+		if err != nil {
+			log.Errorf("couldn't fetch token for IMDSv2: %s", err.Error())
+			return
+		}
+		token = maybeToken
+	}
+
+	idResp, err := c.getResponse(&client, c.metadataEndpoint+"instance-id", token)
 	var instanceID string
 	if err != nil {
 		log.Errorf("couldn't parse instance-id from metadata: %s", err.Error())
@@ -67,7 +83,7 @@ func (c *terminationCollector) Collect(ch chan<- prometheus.Metric) {
 	body, _ := ioutil.ReadAll(idResp.Body)
 	instanceID = string(body)
 
-	typeResp, err := client.Get(c.metadataEndpoint + "instance-type")
+	typeResp, err := c.getResponse(&client, c.metadataEndpoint+"instance-type", token)
 	var instanceType string
 	if err != nil {
 		log.Errorf("couldn't parse instance-type from metadata: %s", err.Error())
@@ -81,7 +97,7 @@ func (c *terminationCollector) Collect(ch chan<- prometheus.Metric) {
 	body, _ = ioutil.ReadAll(typeResp.Body)
 	instanceType = string(body)
 
-	resp, err := client.Get(c.metadataEndpoint + "spot/instance-action")
+	resp, err := c.getResponse(&client, c.metadataEndpoint+"spot/instance-action", token)
 	if err != nil {
 		log.Errorf("Failed to fetch data from metadata service: %s", err)
 		ch <- prometheus.MustNewConstMetric(c.scrapeSuccessful, prometheus.GaugeValue, 0, instanceID)
@@ -114,7 +130,7 @@ func (c *terminationCollector) Collect(ch chan<- prometheus.Metric) {
 		}
 	}
 
-	eventResp, err := client.Get(c.metadataEndpoint + "events/recommendations/rebalance")
+	eventResp, err := c.getResponse(&client, c.metadataEndpoint+"events/recommendations/rebalance", token)
 	if err != nil {
 		log.Errorf("Failed to fetch events data from metadata service: %s", err)
 		ch <- prometheus.MustNewConstMetric(c.rebalanceScrapeSuccessful, prometheus.GaugeValue, 0, instanceID)
@@ -144,4 +160,32 @@ func (c *terminationCollector) Collect(ch chan<- prometheus.Metric) {
 			}
 		}
 	}
+}
+
+func (c *terminationCollector) getIMDSv2Token(client *http.Client, url string) (string, error) {
+	req, err := http.NewRequest("PUT", url, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Add("X-aws-ec2-metadata-token-ttl-seconds", "21600")
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	return string(body), nil
+}
+
+func (c *terminationCollector) getResponse(client *http.Client, url, token string) (*http.Response, error) {
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	if token != "" {
+		req.Header.Add("X-aws-ec2-metadata-token", token)
+	}
+	return client.Do(req)
 }
