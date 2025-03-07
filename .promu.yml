@@ -1,6 +1,5 @@
 go:
   version: 1.9.2
-verbose: false
 repository:
     path: github.com/gjtempleton/spot-termination-exporter
 build:
